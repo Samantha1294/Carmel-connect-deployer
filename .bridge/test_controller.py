@@ -58,6 +58,38 @@ class FakeAPI:
         return result
 
 
+class FakeExecutor:
+    def __init__(self, existing=False, wrong_main=False):
+        self.dispatched = False
+        self.posts = []
+        self.existing = existing
+        self.wrong_main = wrong_main
+
+    def get(self, path):
+        if path == "/git/ref/heads/main":
+            return {"object": {"sha": ("f" * 40 if self.wrong_main else c.EXECUTOR_SHA)}}
+        if path.startswith("/actions/workflows/"):
+            runs = []
+            if self.existing or self.dispatched:
+                runs = [{"id": 456, "display_title": "Carmel DEV dev-test / 123",
+                         "event": "repository_dispatch", "head_sha": c.EXECUTOR_SHA,
+                         "path": ".github/workflows/execute-dev.yml",
+                         "actor": {"login": c.OWNER}, "status": "completed",
+                         "conclusion": "success", "run_attempt": 1}]
+            return {"total_count": len(runs), "workflow_runs": runs}
+        if path == "/actions/runs/456/attempts/1/jobs?per_page=100":
+            return {"total_count": 1, "jobs": [{
+                "name": "Deploy DEV exact commit", "conclusion": "success",
+                "steps": [{"name": "Verified DEV release " + REQUEST["source_sha"],
+                           "conclusion": "success"}],
+            }]}
+        raise AssertionError(path)
+
+    def post(self, path, body):
+        self.posts.append((path, copy.deepcopy(body)))
+        self.dispatched = True
+
+
 class Tests(unittest.TestCase):
     def prod_request(self):
         return dict(REQUEST, target="production", expected_version=165, dev_run_id=123)
@@ -141,6 +173,29 @@ class Tests(unittest.TestCase):
                 with self.subTest(suffix=suffix), self.assertRaises(c.Stop): api.call(method, suffix)
             network.assert_not_called()
 
+    def test_dev_dispatch_is_exact_sha_and_attested(self):
+        executor = FakeExecutor()
+        env = {"GITHUB_SHA": "c" * 40, "GITHUB_RUN_ID": "123",
+               "GITHUB_RUN_ATTEMPT": "1", "GITHUB_EVENT_ISSUE_NUMBER": "7"}
+        report = c.dispatch_dev(executor, REQUEST, env, wait=lambda seconds: None)
+        self.assertEqual(report["executor_run_id"], 456)
+        self.assertEqual(len(executor.posts), 1)
+        path, body = executor.posts[0]
+        self.assertEqual(path, "/dispatches")
+        self.assertEqual(body["event_type"], c.EXECUTOR_EVENT)
+        self.assertEqual(body["client_payload"]["source_sha"], REQUEST["source_sha"])
+        self.assertEqual(body["client_payload"]["expected_head_sha"],
+                         REQUEST["expected_head_sha"])
+        self.assertEqual(body["client_payload"]["executor_sha"], c.EXECUTOR_SHA)
+
+    def test_dev_dispatch_rejects_changed_or_duplicate_executor(self):
+        env = {"GITHUB_SHA": "c" * 40, "GITHUB_RUN_ID": "123",
+               "GITHUB_RUN_ATTEMPT": "1", "GITHUB_EVENT_ISSUE_NUMBER": "7"}
+        for executor in (FakeExecutor(wrong_main=True), FakeExecutor(existing=True)):
+            with self.subTest(executor=executor), self.assertRaises(c.Stop):
+                c.dispatch_dev(executor, REQUEST, env, wait=lambda seconds: None)
+            self.assertEqual(executor.posts, [])
+
     def test_workflow_events_are_safely_separated(self):
         workflow = (c.ROOT.parent / c.WORKFLOW).read_text()
         self.assertIn("issues:", workflow)
@@ -151,7 +206,12 @@ class Tests(unittest.TestCase):
         self.assertIn("github.event_name == 'pull_request'", workflow)
         self.assertIn("github.event_name == 'issues'", workflow)
         self.assertIn("name: Verify deployment controller", workflow)
-        self.assertEqual(workflow.count("GOOGLE_OAUTH_JSON:"), 2)
+        self.assertEqual(workflow.count("GOOGLE_OAUTH_JSON:"), 1)
+        self.assertEqual(workflow.count("secrets.CARMEL_EXECUTOR_TOKEN"), 1)
+        self.assertIn("run: python3 -I .bridge/controller.py dispatch-dev", workflow)
+        self.assertNotIn("controller.py deploy dev", workflow)
+        self.assertIn("name: Test exact DEV candidate", workflow)
+        self.assertIn("needs: [validate, candidate-test-dev]", workflow)
         self.assertIn("environment: carmel-dev", workflow)
         self.assertIn("environment: carmel-production", workflow)
         self.assertIn("output suppressed in this public controller", workflow)
