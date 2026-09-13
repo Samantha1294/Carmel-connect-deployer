@@ -176,7 +176,7 @@ class Tests(unittest.TestCase):
     def test_dev_dispatch_is_exact_sha_and_attested(self):
         executor = FakeExecutor()
         env = {"GITHUB_SHA": "c" * 40, "GITHUB_RUN_ID": "123",
-               "GITHUB_RUN_ATTEMPT": "1", "GITHUB_EVENT_ISSUE_NUMBER": "7"}
+               "GITHUB_EVENT_ISSUE_NUMBER": "7"}
         report = c.dispatch_dev(executor, REQUEST, env, wait=lambda seconds: None)
         self.assertEqual(report["executor_run_id"], 456)
         self.assertEqual(len(executor.posts), 1)
@@ -187,10 +187,11 @@ class Tests(unittest.TestCase):
         self.assertEqual(body["client_payload"]["expected_head_sha"],
                          REQUEST["expected_head_sha"])
         self.assertEqual(body["client_payload"]["executor_sha"], c.EXECUTOR_SHA)
+        self.assertEqual(len(body["client_payload"]), 10)
 
     def test_dev_dispatch_rejects_changed_or_duplicate_executor(self):
         env = {"GITHUB_SHA": "c" * 40, "GITHUB_RUN_ID": "123",
-               "GITHUB_RUN_ATTEMPT": "1", "GITHUB_EVENT_ISSUE_NUMBER": "7"}
+               "GITHUB_EVENT_ISSUE_NUMBER": "7"}
         for executor in (FakeExecutor(wrong_main=True), FakeExecutor(existing=True)):
             with self.subTest(executor=executor), self.assertRaises(c.Stop):
                 c.dispatch_dev(executor, REQUEST, env, wait=lambda seconds: None)
