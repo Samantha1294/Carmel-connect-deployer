@@ -58,12 +58,12 @@ jobs:
         id: request
         run: python3 -I .bridge/controller.py validate
 
-  dev:
-    name: Deploy DEV
+  candidate-test-dev:
+    name: Test exact DEV candidate
     needs: validate
     if: needs.validate.outputs.target == 'dev'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     environment: carmel-dev
     steps:
       - name: Checkout protected controller
@@ -82,21 +82,36 @@ jobs:
             echo "STOP: Candidate static tests failed; output suppressed in this public controller."
             exit 1
           fi
+
+  dev:
+    name: Deploy DEV
+    needs: [validate, candidate-test-dev]
+    if: needs.validate.outputs.target == 'dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 35
+    environment: carmel-dev
+    steps:
+      - name: Checkout protected controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Fetch and verify exact private source
+        env:
+          SOURCE_TOKEN: ${{ secrets.CARMEL_SOURCE_TOKEN }}
+        run: python3 -I .bridge/controller.py fetch
       - name: Verified DEV release ${{ needs.validate.outputs.source_sha }}
         env:
           GH_TOKEN: ${{ github.token }}
-          SOURCE_TOKEN: ${{ secrets.CARMEL_SOURCE_TOKEN }}
-          SCRIPT_ID: ${{ secrets.CARMEL_SCRIPT_ID }}
-          GOOGLE_OAUTH_JSON: ${{ secrets.CARMEL_GOOGLE_OAUTH_JSON }}
-          STAFF_DEPLOYMENT_ID: ''
-        run: python3 -I .bridge/controller.py deploy dev
+          EXECUTOR_TOKEN: ${{ secrets.CARMEL_EXECUTOR_TOKEN }}
+          GITHUB_EVENT_ISSUE_NUMBER: ${{ github.event.issue.number }}
+        run: python3 -I .bridge/controller.py dispatch-dev
 
-  production:
-    name: Deploy production
+  candidate-test-production:
+    name: Test exact production candidate
     needs: validate
     if: needs.validate.outputs.target == 'production'
     runs-on: ubuntu-24.04
-    timeout-minutes: 20
+    timeout-minutes: 10
     environment: carmel-production
     steps:
       - name: Checkout protected controller
@@ -115,6 +130,23 @@ jobs:
             echo "STOP: Candidate static tests failed; output suppressed in this public controller."
             exit 1
           fi
+
+  production:
+    name: Deploy production
+    needs: [validate, candidate-test-production]
+    if: needs.validate.outputs.target == 'production'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: carmel-production
+    steps:
+      - name: Checkout protected controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Fetch and verify exact private source
+        env:
+          SOURCE_TOKEN: ${{ secrets.CARMEL_SOURCE_TOKEN }}
+        run: python3 -I .bridge/controller.py fetch
       - name: Verified production release
         env:
           GH_TOKEN: ${{ github.token }}

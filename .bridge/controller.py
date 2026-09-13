@@ -19,9 +19,13 @@ import zipfile
 
 CONTROLLER_REPO = "Samantha1294/Carmel-connect-deployer"
 SOURCE_REPO = "Samantha1294/Carmel-connect"
+EXECUTOR_REPO = "Samantha1294/Carmel-connect-runner"
 OWNER = "Samantha1294"
 BRANCH = "main"
 WORKFLOW = ".github/workflows/carmel-release.yml"
+EXECUTOR_WORKFLOW = "execute-dev.yml"
+EXECUTOR_EVENT = "carmel-dev-approved-v1"
+EXECUTOR_SHA = "8ea607c3886a64bf76dcef3515b98415f6e44496"
 LABELS = {"dev": "deploy-dev-approved", "production": "deploy-production-approved"}
 
 # SHA-256 allowlists let the public controller validate identifiers supplied only
@@ -75,7 +79,7 @@ class NoRedirect(urllib.request.HTTPRedirectHandler):
         return None
 
 
-def http_json(url, method="GET", body=None, token=None, form=False):
+def http_json(url, method="GET", body=None, token=None, form=False, allow_empty=False):
     host = urllib.parse.urlsplit(url).hostname
     check(host in {"api.github.com", "oauth2.googleapis.com", "script.googleapis.com"},
           "Network destination not allowlisted")
@@ -93,6 +97,8 @@ def http_json(url, method="GET", body=None, token=None, form=False):
         with urllib.request.build_opener(NoRedirect).open(request, timeout=90) as response:
             payload = response.read(30_000_001)
             check(len(payload) <= 30_000_000, "Response exceeded size limit")
+            if allow_empty and not payload:
+                return None
             return json.loads(payload)
     except urllib.error.HTTPError as error:
         raise Stop(f"HTTP {error.code} from {host}; response withheld; "
@@ -104,12 +110,18 @@ def http_json(url, method="GET", body=None, token=None, form=False):
 class GitHub:
     def __init__(self, token, repo):
         check(bool(token), "Missing GitHub token")
-        check(repo in {CONTROLLER_REPO, SOURCE_REPO}, "GitHub repository not allowlisted")
+        check(repo in {CONTROLLER_REPO, SOURCE_REPO, EXECUTOR_REPO},
+              "GitHub repository not allowlisted")
         self.token, self.repo = token, repo
 
     def get(self, path):
         check(path.startswith("/") and ".." not in path, "Invalid GitHub path")
         return http_json("https://api.github.com/repos/" + self.repo + path, token=self.token)
+
+    def post(self, path, body):
+        check(path.startswith("/") and ".." not in path, "Invalid GitHub path")
+        return http_json("https://api.github.com/repos/" + self.repo + path,
+                         "POST", body, self.token, allow_empty=True)
 
     def tree(self, commit):
         tree = self.get(f"/git/trees/{full_sha(commit)}?recursive=1")
@@ -327,6 +339,75 @@ def verify_dev_evidence(controller, run_id, source_sha):
           "DEV run does not attest this exact source SHA")
 
 
+def executor_runs(executor, display_title):
+    result = executor.get(
+        f"/actions/workflows/{EXECUTOR_WORKFLOW}/runs?event=repository_dispatch&per_page=50")
+    runs = result.get("workflow_runs", [])
+    check(isinstance(runs, list) and len(runs) <= 50, "Invalid executor run lookup")
+    return [run for run in runs
+            if run.get("display_title") == display_title]
+
+
+def verify_executor_run(executor, run, source_sha):
+    check(run.get("event") == "repository_dispatch" and
+          run.get("head_sha") == EXECUTOR_SHA and
+          run.get("path") == ".github/workflows/execute-dev.yml" and
+          run.get("actor", {}).get("login") == OWNER,
+          "DEV executor run identity mismatch")
+    check(run.get("status") == "completed" and run.get("conclusion") == "success",
+          "DEV executor run did not succeed")
+    attempt = int(run["run_attempt"])
+    jobs = executor.get(f"/actions/runs/{run['id']}/attempts/{attempt}/jobs?per_page=100")
+    check(jobs.get("total_count", 0) <= 100, "Truncated executor jobs")
+    selected = [job for job in jobs.get("jobs", []) if job.get("name") == "Deploy DEV exact commit"]
+    check(len(selected) == 1 and selected[0].get("conclusion") == "success",
+          "DEV executor deployment job did not complete")
+    step_name = "Verified DEV release " + source_sha
+    steps = [step for step in selected[0].get("steps", []) if step.get("name") == step_name]
+    check(len(steps) == 1 and steps[0].get("conclusion") == "success",
+          "DEV executor does not attest this exact source SHA")
+
+
+def dispatch_dev(executor, request, env, wait=time.sleep):
+    check(request["target"] == "dev", "Only DEV may use the private executor")
+    controller_sha = full_sha(env.get("GITHUB_SHA", ""))
+    current = executor.get("/git/ref/heads/main")
+    check(current.get("object", {}).get("sha") == EXECUTOR_SHA,
+          "Private executor main does not match the controller allowlist")
+    run_id = int(env.get("GITHUB_RUN_ID", "0"))
+    run_attempt = int(env.get("GITHUB_RUN_ATTEMPT", "0"))
+    issue_number = int(env.get("GITHUB_EVENT_ISSUE_NUMBER", "0"))
+    check(run_id > 0 and run_attempt > 0 and issue_number > 0,
+          "Missing trusted controller run metadata")
+    title = f"Carmel DEV {request['request_id']} / {run_id}"
+    check(not executor_runs(executor, title), "Duplicate DEV executor request identity")
+    payload = {
+        "schema": 1,
+        "target": "dev",
+        "source_sha": request["source_sha"],
+        "expected_head_sha": request["expected_head_sha"],
+        "request_id": request["request_id"],
+        "risk": request["risk"],
+        "controller_repo": CONTROLLER_REPO,
+        "controller_sha": controller_sha,
+        "controller_run_id": run_id,
+        "controller_run_attempt": run_attempt,
+        "approval_issue_number": issue_number,
+        "executor_sha": EXECUTOR_SHA,
+    }
+    executor.post("/dispatches", {"event_type": EXECUTOR_EVENT, "client_payload": payload})
+    for unused_attempt in range(181):
+        matches = executor_runs(executor, title)
+        check(len(matches) <= 1, "Duplicate DEV executor runs detected")
+        if matches:
+            run = matches[0]
+            if run.get("status") == "completed":
+                verify_executor_run(executor, run, request["source_sha"])
+                return {"executor_run_id": run["id"], "executor_sha": EXECUTOR_SHA}
+        wait(10)
+    raise Stop("Timed out waiting for the DEV executor; no retry attempted")
+
+
 def release(api, request, expected, baseline, progress, wait=time.sleep):
     project = api.call("GET")
     check(project.get("scriptId") == api.script_id and bool(project.get("parentId")),
@@ -407,12 +488,28 @@ def main():
         write_candidate(source, request, Path("candidate"))
         print(f"Verified and prepared exact source {request['source_sha']} ({len(FILES)} files)")
         return
-    check(command == ["deploy", request["target"]], "Command and request target must match")
     controller = GitHub(os.environ.get("GH_TOKEN"), CONTROLLER_REPO)
     current = controller.get("/git/ref/heads/main")
     check(current.get("object", {}).get("sha") == os.environ.get("GITHUB_SHA"),
           "Controller main advanced; stale queued release rejected")
     candidate = read_candidate(request, Path("candidate"))
+    if command == ["dispatch-dev"]:
+        check(request["target"] == "dev", "Private executor command is DEV-only")
+        executor = GitHub(os.environ.pop("EXECUTOR_TOKEN", ""), EXECUTOR_REPO)
+        report = dispatch_dev(executor, request, os.environ)
+        report.update({"target": "dev", "source_sha": request["source_sha"],
+                       "files_verified": len(candidate), "version_created": False,
+                       "deployment_updated": False})
+        text = json.dumps(report, indent=2)
+        print(text)
+        summary = os.environ.get("GITHUB_STEP_SUMMARY")
+        if summary:
+            with open(summary, "a") as handle:
+                handle.write("## Verified Carmel Connect DEV release\n```json\n" +
+                             text + "\n```\n")
+        return
+    check(command == ["deploy", "production"] and request["target"] == "production",
+          "Command and request target must match")
     source = GitHub(os.environ.pop("SOURCE_TOKEN", ""), SOURCE_REPO)
     baseline, unused = source.source(request["expected_head_sha"])
     if request["target"] == "production":
