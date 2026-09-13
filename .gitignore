@@ -1,0 +1,4 @@
+candidate/
+__pycache__/
+*.pyc
+

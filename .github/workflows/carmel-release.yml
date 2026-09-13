@@ -1,0 +1,104 @@
+name: Carmel Connect exact-commit release
+
+on:
+  issues:
+    types: [labeled]
+
+concurrency:
+  group: carmel-connect-all-releases
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  validate:
+    name: Validate trusted release request
+    if: >-
+      github.repository == 'Samantha1294/Carmel-connect-deployer' &&
+      github.actor == 'Samantha1294' &&
+      github.event.issue.user.login == 'Samantha1294' &&
+      (github.event.label.name == 'deploy-dev-approved' ||
+       github.event.label.name == 'deploy-production-approved')
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      target: ${{ steps.request.outputs.target }}
+      source_sha: ${{ steps.request.outputs.source_sha }}
+    steps:
+      - name: Checkout protected controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Offline controller safety tests
+        run: python3 -I -m unittest discover -s .bridge -p 'test_*.py' -v
+      - name: Validate labeled issue request
+        id: request
+        run: python3 -I .bridge/controller.py validate
+
+  dev:
+    name: Deploy DEV
+    needs: validate
+    if: needs.validate.outputs.target == 'dev'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: carmel-dev
+    steps:
+      - name: Checkout protected controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Fetch and verify exact private source
+        env:
+          SOURCE_TOKEN: ${{ secrets.CARMEL_SOURCE_TOKEN }}
+        run: python3 -I .bridge/controller.py fetch
+      - name: Candidate static tests without deployment credentials
+        run: |
+          if node --test candidate/tests/student-college-plans.cjs >/tmp/candidate-test.log 2>&1; then
+            echo "Candidate static tests passed."
+          else
+            echo "STOP: Candidate static tests failed; output suppressed in this public controller."
+            exit 1
+          fi
+      - name: Verified DEV release ${{ needs.validate.outputs.source_sha }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TOKEN: ${{ secrets.CARMEL_SOURCE_TOKEN }}
+          SCRIPT_ID: ${{ secrets.CARMEL_SCRIPT_ID }}
+          GOOGLE_OAUTH_JSON: ${{ secrets.CARMEL_GOOGLE_OAUTH_JSON }}
+          STAFF_DEPLOYMENT_ID: ''
+        run: python3 -I .bridge/controller.py deploy dev
+
+  production:
+    name: Deploy production
+    needs: validate
+    if: needs.validate.outputs.target == 'production'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment: carmel-production
+    steps:
+      - name: Checkout protected controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Fetch and verify exact private source
+        env:
+          SOURCE_TOKEN: ${{ secrets.CARMEL_SOURCE_TOKEN }}
+        run: python3 -I .bridge/controller.py fetch
+      - name: Candidate static tests without deployment credentials
+        run: |
+          if node --test candidate/tests/student-college-plans.cjs >/tmp/candidate-test.log 2>&1; then
+            echo "Candidate static tests passed."
+          else
+            echo "STOP: Candidate static tests failed; output suppressed in this public controller."
+            exit 1
+          fi
+      - name: Verified production release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SOURCE_TOKEN: ${{ secrets.CARMEL_SOURCE_TOKEN }}
+          SCRIPT_ID: ${{ secrets.CARMEL_SCRIPT_ID }}
+          STAFF_DEPLOYMENT_ID: ${{ secrets.CARMEL_STAFF_DEPLOYMENT_ID }}
+          GOOGLE_OAUTH_JSON: ${{ secrets.CARMEL_GOOGLE_OAUTH_JSON }}
+        run: python3 -I .bridge/controller.py deploy production
