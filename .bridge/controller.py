@@ -25,7 +25,7 @@ BRANCH = "main"
 WORKFLOW = ".github/workflows/carmel-release.yml"
 EXECUTOR_WORKFLOW = "execute-dev.yml"
 EXECUTOR_EVENT = "carmel-dev-approved-v1"
-EXECUTOR_SHA = "958c4d70f19b080595b409e47b342fb0cf37e3b1"
+EXECUTOR_SHA = "22e80b0d579c4ab0387b8ed6f41bf0a05ff543f8"
 LABELS = {"dev": "deploy-dev-approved", "production": "deploy-production-approved"}
 
 # SHA-256 allowlists let the public controller validate identifiers supplied only
