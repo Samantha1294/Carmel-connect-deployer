@@ -5,7 +5,7 @@ This public repository contains only the guarded release controller for the priv
 Google credential, Apps Script identifier, student data, workbook data, or runtime log.
 
 GitHub Free enforces branch protection, CODEOWNERS, environment deployment restrictions,
-environment secrets, and required environment reviewers for this public repository. The
+and environment secrets for this public repository. The
 private source repository remains private and is read through a fine-grained token limited
 to read-only Contents access on that one repository.
 
@@ -20,18 +20,19 @@ to read-only Contents access on that one repository.
   requires the exact 14-file Apps Script inventory, and writes only those files locally.
 * Candidate tests run in a separate GitHub-hosted job from every credential-bearing
   execution step. Their detailed output is suppressed because this controller is public.
-* DEV dispatches a strict, exact-SHA payload to a private executor repository whose trusted
+* Both targets dispatch a strict, exact-SHA payload to a private executor repository whose trusted
   workflow runs on a dedicated self-hosted Mac runner. Candidate source is handled only as
   data and is never executed on that Mac.
-* The Mac uses its existing local clasp authentication and a locally stored, hash-allowlisted
-  DEV project configuration. No Google OAuth or clasp credential is stored in GitHub.
+* The Mac uses its existing local clasp authentication and locally stored, hash-allowlisted
+  DEV and production project configurations. The existing staff deployment ID is also
+  locally hash-allowlisted. No Google OAuth or clasp credential is stored in GitHub.
 * Every run is serialized. The Apps Script API endpoint/method allowlist contains no
   trigger, Script Properties, Sheets, Drive, Gmail, Blackbaud, permissions, scripts.run,
   deployment-create, or deployment-delete operation.
 * Manifest changes and any request marked high-risk are blocked. Those require a separate
   explicitly approved procedure.
 * Production requires a successful DEV workflow run for the same exact source SHA and a
-  protected production-environment approval. It updates only the allowlisted existing staff
+  separate owner-applied production label. It updates only the allowlisted existing staff
   deployment after creating and verifying an immutable version.
 
 ## One-time owner setup
@@ -52,13 +53,15 @@ to read-only Contents access on that one repository.
    repository or account permissions. Set an expiry and rotate it.
 6. Register a dedicated self-hosted macOS runner only with the private
    `Samantha1294/Carmel-connect-runner` repository and add the custom label
-   `carmel-connect-dev`. Run it as a dedicated local service account when practical.
+   `Carmel-Connect-DEV-Mac`. The workflow also requires the built-in `macOS` and `ARM64`
+   labels. Run it as a dedicated local service account when practical.
 7. On that Mac, set `CARMEL_SOURCE_REPO_PATH` to the authenticated local working copy of the
    private authoritative source and `CARMEL_DEV_CLASP_PROJECT` to a durable local
    `.clasp.json` that targets only DEV. These values and clasp authentication stay local.
-8. Do not create or populate `carmel-production` until the DEV bridge test passes. Production
-   later gets separate credentials, protected-branch restriction, and Samantha as required
-   reviewer. The staff deployment ID exists only as `CARMEL_STAFF_DEPLOYMENT_ID` there.
+8. After the DEV bridge test passes, create `carmel-production`, restrict it to `main`, and
+   add the same narrowly scoped source and executor tokens as environment secrets. Production
+   identifiers remain only in local runner files; they are never GitHub secrets or repository
+   content.
 
 ## Release request
 
@@ -71,3 +74,10 @@ Create an issue whose entire body is JSON, then apply the DEV label:
 The controller intentionally does not close issues or post comments. The run summary reports
 transport verification. Authenticated UI/runtime smoke testing remains a separate acceptance
 step and does not require a Terminal.
+
+After that exact DEV run succeeds and is approved, create a separate issue and apply only the
+production label:
+
+```json
+{"schema":1,"target":"production","source_sha":"FULL_TESTED_SHA","expected_head_sha":"FULL_CURRENT_PRODUCTION_HEAD_SHA","expected_version":165,"dev_run_id":SUCCESSFUL_DEV_CONTROLLER_RUN_ID,"request_id":"unique-production-id","risk":"standard"}
+```

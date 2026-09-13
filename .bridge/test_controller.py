@@ -71,7 +71,7 @@ class FakeExecutor:
         if path.startswith("/actions/workflows/"):
             runs = []
             if self.existing or self.dispatched:
-                runs = [{"id": 456, "display_title": "Carmel DEV dev-test / 123",
+                runs = [{"id": 456, "display_title": "Carmel release dev-test / 123",
                          "event": "repository_dispatch", "head_sha": c.EXECUTOR_SHA,
                          "path": ".github/workflows/execute-dev.yml",
                          "actor": {"login": c.OWNER}, "status": "completed",
@@ -79,8 +79,8 @@ class FakeExecutor:
             return {"total_count": len(runs), "workflow_runs": runs}
         if path == "/actions/runs/456/attempts/1/jobs?per_page=100":
             return {"total_count": 1, "jobs": [{
-                "name": "Deploy DEV exact commit", "conclusion": "success",
-                "steps": [{"name": "Verified DEV release " + REQUEST["source_sha"],
+                "name": "Deploy exact commit", "conclusion": "success",
+                "steps": [{"name": "Verified release " + REQUEST["source_sha"],
                            "conclusion": "success"}],
             }]}
         raise AssertionError(path)
@@ -119,6 +119,20 @@ class Tests(unittest.TestCase):
     def test_source_round_trip_exact(self):
         source = dict(SOURCE, **{"Code.js": "// café\r\nconst x = '字';\n\n"})
         self.assertEqual(c.api_source({"files": c.api_files(source)}), source)
+
+    def test_github_blob_accepts_api_line_wrapping_but_rejects_invalid_base64(self):
+        raw = b"verified source bytes"
+        encoded = c.base64.b64encode(raw).decode()
+        tree = {"Code.js": {"type": "blob", "mode": "100644",
+                            "sha": c.blob_hash(raw)}}
+        github = c.GitHub("token", c.SOURCE_REPO)
+        with patch.object(github, "get", return_value={
+                "encoding": "base64", "content": encoded[:8] + "\n" + encoded[8:]}):
+            self.assertEqual(github.file("a" * 40, "Code.js", tree), raw)
+        with patch.object(github, "get", return_value={
+                "encoding": "base64", "content": encoded + "!"}):
+            with self.assertRaises(Exception):
+                github.file("a" * 40, "Code.js", tree)
 
     def test_dev_push_only_and_readback(self):
         api = FakeAPI()
@@ -173,11 +187,11 @@ class Tests(unittest.TestCase):
                 with self.subTest(suffix=suffix), self.assertRaises(c.Stop): api.call(method, suffix)
             network.assert_not_called()
 
-    def test_dev_dispatch_is_exact_sha_and_attested(self):
+    def test_executor_dispatch_is_exact_sha_and_attested(self):
         executor = FakeExecutor()
         env = {"GITHUB_SHA": "c" * 40, "GITHUB_RUN_ID": "123",
                "GITHUB_EVENT_ISSUE_NUMBER": "7"}
-        report = c.dispatch_dev(executor, REQUEST, env, wait=lambda seconds: None)
+        report = c.dispatch_executor(executor, REQUEST, env, wait=lambda seconds: None)
         self.assertEqual(report["executor_run_id"], 456)
         self.assertEqual(len(executor.posts), 1)
         path, body = executor.posts[0]
@@ -186,15 +200,17 @@ class Tests(unittest.TestCase):
         self.assertEqual(body["client_payload"]["source_sha"], REQUEST["source_sha"])
         self.assertEqual(body["client_payload"]["expected_head_sha"],
                          REQUEST["expected_head_sha"])
+        self.assertIsNone(body["client_payload"]["expected_version"])
+        self.assertIsNone(body["client_payload"]["dev_run_id"])
         self.assertEqual(body["client_payload"]["executor_sha"], c.EXECUTOR_SHA)
         self.assertEqual(len(body["client_payload"]), 10)
 
-    def test_dev_dispatch_rejects_changed_or_duplicate_executor(self):
+    def test_executor_dispatch_rejects_changed_or_duplicate_executor(self):
         env = {"GITHUB_SHA": "c" * 40, "GITHUB_RUN_ID": "123",
                "GITHUB_EVENT_ISSUE_NUMBER": "7"}
         for executor in (FakeExecutor(wrong_main=True), FakeExecutor(existing=True)):
             with self.subTest(executor=executor), self.assertRaises(c.Stop):
-                c.dispatch_dev(executor, REQUEST, env, wait=lambda seconds: None)
+                c.dispatch_executor(executor, REQUEST, env, wait=lambda seconds: None)
             self.assertEqual(executor.posts, [])
 
     def test_workflow_events_are_safely_separated(self):
@@ -207,9 +223,9 @@ class Tests(unittest.TestCase):
         self.assertIn("github.event_name == 'pull_request'", workflow)
         self.assertIn("github.event_name == 'issues'", workflow)
         self.assertIn("name: Verify deployment controller", workflow)
-        self.assertEqual(workflow.count("GOOGLE_OAUTH_JSON:"), 1)
-        self.assertEqual(workflow.count("secrets.CARMEL_EXECUTOR_TOKEN"), 1)
-        self.assertIn("run: python3 -I .bridge/controller.py dispatch-dev", workflow)
+        self.assertNotIn("GOOGLE_OAUTH_JSON:", workflow)
+        self.assertEqual(workflow.count("secrets.CARMEL_EXECUTOR_TOKEN"), 2)
+        self.assertEqual(workflow.count("run: python3 -I .bridge/controller.py dispatch"), 2)
         self.assertNotIn("controller.py deploy dev", workflow)
         self.assertIn("name: Test exact DEV candidate", workflow)
         self.assertIn("needs: [validate, candidate-test-dev]", workflow)
