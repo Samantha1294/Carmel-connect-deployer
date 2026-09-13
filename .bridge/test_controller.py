@@ -141,12 +141,16 @@ class Tests(unittest.TestCase):
                 with self.subTest(suffix=suffix), self.assertRaises(c.Stop): api.call(method, suffix)
             network.assert_not_called()
 
-    def test_workflow_is_issue_only_serialized_and_separated(self):
+    def test_workflow_events_are_safely_separated(self):
         workflow = (c.ROOT.parent / c.WORKFLOW).read_text()
         self.assertIn("issues:", workflow)
+        self.assertIn("pull_request:", workflow)
         self.assertNotIn("workflow_dispatch", workflow)
         self.assertNotIn("pull_request_target", workflow)
         self.assertIn("cancel-in-progress: false", workflow)
+        self.assertIn("github.event_name == 'pull_request'", workflow)
+        self.assertIn("github.event_name == 'issues'", workflow)
+        self.assertIn("name: Verify deployment controller", workflow)
         self.assertEqual(workflow.count("GOOGLE_OAUTH_JSON:"), 2)
         self.assertIn("environment: carmel-dev", workflow)
         self.assertIn("environment: carmel-production", workflow)

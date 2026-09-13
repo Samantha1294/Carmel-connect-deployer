@@ -11,8 +11,9 @@ to read-only Contents access on that one repository.
 
 ## Security model
 
-* The workflow exists only on protected `main` and runs only when the repository owner
-  applies an existing target-specific label to an issue authored by that owner.
+* Deployment jobs exist only on protected `main` and run only when the repository owner
+  applies an existing target-specific label to an issue authored by that owner. Pull
+  requests run credential-free controller tests only.
 * The issue body is one strict JSON request containing full source and expected-current
   commit SHAs. Branch names are rejected.
 * The controller fetches Git blobs from the private repository, verifies blob integrity,
@@ -34,13 +35,14 @@ to read-only Contents access on that one repository.
 ## One-time owner setup
 
 1. Create this repository as **public**, with no generated README/license/gitignore.
-2. Publish this reviewed controller to `main`, then protect `main`: require a pull request,
-   one approval, code-owner review, stale-review dismissal, conversation resolution, block
-   force pushes and deletion, and do not allow bypass. On GitHub Free these controls are
-   enforced for public repositories.
+2. Publish this reviewed controller to `main`, then protect `main` with an active public-
+   repository ruleset: require a pull request, block force pushes and deletion, and do not
+   allow bypass. For a single-owner repository, require zero independent approvals so the
+   owner can merge only after the credential-free controller check succeeds.
 3. Create existing labels `deploy-dev-approved` and `deploy-production-approved`. Do not
    permit Actions to create arbitrary approval labels.
-4. Create `carmel-dev`, restricted to protected branch `main`. Add environment secrets:
+4. Create `carmel-dev`, choose selected branches and tags, and allow exactly branch `main`
+   with no tags. Add environment secrets:
    `CARMEL_SOURCE_TOKEN`, `CARMEL_SCRIPT_ID`, and `CARMEL_GOOGLE_OAUTH_JSON`.
 5. The source token is a fine-grained PAT owned by the school-controlled GitHub account,
    limited to only `Samantha1294/Carmel-connect`, with **Contents: Read-only** and no other

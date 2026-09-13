@@ -3,6 +3,13 @@ name: Carmel Connect exact-commit release
 on:
   issues:
     types: [labeled]
+  pull_request:
+    branches: [main]
+    paths:
+      - .bridge/**
+      - .github/**
+      - README.md
+      - .gitignore
 
 concurrency:
   group: carmel-connect-all-releases
@@ -13,9 +20,23 @@ permissions:
   actions: read
 
 jobs:
+  controller-check:
+    name: Verify deployment controller
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Checkout proposed controller
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Offline controller safety tests
+        run: python3 -I -m unittest discover -s .bridge -p 'test_*.py' -v
+
   validate:
     name: Validate trusted release request
     if: >-
+      github.event_name == 'issues' &&
       github.repository == 'Samantha1294/Carmel-connect-deployer' &&
       github.actor == 'Samantha1294' &&
       github.event.issue.user.login == 'Samantha1294' &&
