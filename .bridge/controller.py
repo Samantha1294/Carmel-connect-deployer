@@ -24,8 +24,8 @@ OWNER = "Samantha1294"
 BRANCH = "main"
 WORKFLOW = ".github/workflows/carmel-release.yml"
 EXECUTOR_WORKFLOW = "execute-dev.yml"
-EXECUTOR_EVENT = "carmel-dev-approved-v1"
-EXECUTOR_SHA = "4eaf100f2e3456a8acc3ee5fc1aa77b9ff78205c"
+EXECUTOR_EVENT = "carmel-release-approved-v1"
+EXECUTOR_SHA = "01f3daf447ba59b33438c266a404a8be783fdf3b"
 LABELS = {"dev": "deploy-dev-approved", "production": "deploy-production-approved"}
 
 # SHA-256 allowlists let the public controller validate identifiers supplied only
@@ -135,7 +135,8 @@ class GitHub:
               "Missing or non-regular source file")
         result = self.get(f"/git/blobs/{full_sha(entry['sha'])}")
         check(result.get("encoding") == "base64", "Unexpected Git blob encoding")
-        raw = base64.b64decode(result["content"], validate=True)
+        encoded = re.sub(r"\s+", "", result["content"])
+        raw = base64.b64decode(encoded, validate=True)
         check(blob_hash(raw) == entry["sha"], "Git blob integrity failure")
         return raw
 
@@ -348,28 +349,28 @@ def executor_runs(executor, display_title):
             if run.get("display_title") == display_title]
 
 
-def verify_executor_run(executor, run, source_sha):
+def verify_executor_run(executor, run, request):
     check(run.get("event") == "repository_dispatch" and
           run.get("head_sha") == EXECUTOR_SHA and
           run.get("path") == ".github/workflows/execute-dev.yml" and
           run.get("actor", {}).get("login") == OWNER,
-          "DEV executor run identity mismatch")
+          "Release executor run identity mismatch")
     check(run.get("status") == "completed" and run.get("conclusion") == "success",
-          "DEV executor run did not succeed")
+          "Release executor run did not succeed")
     attempt = int(run["run_attempt"])
     jobs = executor.get(f"/actions/runs/{run['id']}/attempts/{attempt}/jobs?per_page=100")
     check(jobs.get("total_count", 0) <= 100, "Truncated executor jobs")
-    selected = [job for job in jobs.get("jobs", []) if job.get("name") == "Deploy DEV exact commit"]
+    selected = [job for job in jobs.get("jobs", []) if job.get("name") == "Deploy exact commit"]
     check(len(selected) == 1 and selected[0].get("conclusion") == "success",
-          "DEV executor deployment job did not complete")
-    step_name = "Verified DEV release " + source_sha
+          "Release executor deployment job did not complete")
+    step_name = "Verified release " + request["source_sha"]
     steps = [step for step in selected[0].get("steps", []) if step.get("name") == step_name]
     check(len(steps) == 1 and steps[0].get("conclusion") == "success",
-          "DEV executor does not attest this exact source SHA")
+          "Release executor does not attest this exact source SHA")
 
 
-def dispatch_dev(executor, request, env, wait=time.sleep):
-    check(request["target"] == "dev", "Only DEV may use the private executor")
+def dispatch_executor(executor, request, env, wait=time.sleep):
+    check(request["target"] in {"dev", "production"}, "Unsupported executor target")
     controller_sha = full_sha(env.get("GITHUB_SHA", ""))
     current = executor.get("/git/ref/heads/main")
     check(current.get("object", {}).get("sha") == EXECUTOR_SHA,
@@ -378,31 +379,31 @@ def dispatch_dev(executor, request, env, wait=time.sleep):
     issue_number = int(env.get("GITHUB_EVENT_ISSUE_NUMBER", "0"))
     check(run_id > 0 and issue_number > 0,
           "Missing trusted controller run metadata")
-    title = f"Carmel DEV {request['request_id']} / {run_id}"
-    check(not executor_runs(executor, title), "Duplicate DEV executor request identity")
+    title = f"Carmel release {request['request_id']} / {run_id}"
+    check(not executor_runs(executor, title), "Duplicate release executor request identity")
     payload = {
-        "target": "dev",
+        "target": request["target"],
         "source_sha": request["source_sha"],
         "expected_head_sha": request["expected_head_sha"],
+        "expected_version": request["expected_version"],
+        "dev_run_id": request["dev_run_id"],
         "request_id": request["request_id"],
         "risk": request["risk"],
-        "controller_repo": CONTROLLER_REPO,
         "controller_sha": controller_sha,
         "controller_run_id": run_id,
-        "approval_issue_number": issue_number,
         "executor_sha": EXECUTOR_SHA,
     }
     executor.post("/dispatches", {"event_type": EXECUTOR_EVENT, "client_payload": payload})
     for unused_attempt in range(181):
         matches = executor_runs(executor, title)
-        check(len(matches) <= 1, "Duplicate DEV executor runs detected")
+        check(len(matches) <= 1, "Duplicate release executor runs detected")
         if matches:
             run = matches[0]
             if run.get("status") == "completed":
-                verify_executor_run(executor, run, request["source_sha"])
+                verify_executor_run(executor, run, request)
                 return {"executor_run_id": run["id"], "executor_sha": EXECUTOR_SHA}
         wait(10)
-    raise Stop("Timed out waiting for the DEV executor; no retry attempted")
+    raise Stop("Timed out waiting for the release executor; no retry attempted")
 
 
 def release(api, request, expected, baseline, progress, wait=time.sleep):
@@ -490,19 +491,19 @@ def main():
     check(current.get("object", {}).get("sha") == os.environ.get("GITHUB_SHA"),
           "Controller main advanced; stale queued release rejected")
     candidate = read_candidate(request, Path("candidate"))
-    if command == ["dispatch-dev"]:
-        check(request["target"] == "dev", "Private executor command is DEV-only")
+    if command == ["dispatch"]:
+        if request["target"] == "production":
+            verify_dev_evidence(controller, request["dev_run_id"], request["source_sha"])
         executor = GitHub(os.environ.pop("EXECUTOR_TOKEN", ""), EXECUTOR_REPO)
-        report = dispatch_dev(executor, request, os.environ)
-        report.update({"target": "dev", "source_sha": request["source_sha"],
-                       "files_verified": len(candidate), "version_created": False,
-                       "deployment_updated": False})
+        report = dispatch_executor(executor, request, os.environ)
+        report.update({"target": request["target"], "source_sha": request["source_sha"],
+                       "files_verified": len(candidate)})
         text = json.dumps(report, indent=2)
         print(text)
         summary = os.environ.get("GITHUB_STEP_SUMMARY")
         if summary:
             with open(summary, "a") as handle:
-                handle.write("## Verified Carmel Connect DEV release\n```json\n" +
+                handle.write("## Verified Carmel Connect release\n```json\n" +
                              text + "\n```\n")
         return
     check(command == ["deploy", "production"] and request["target"] == "production",
