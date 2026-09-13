@@ -18,11 +18,13 @@ to read-only Contents access on that one repository.
   commit SHAs. Branch names are rejected.
 * The controller fetches Git blobs from the private repository, verifies blob integrity,
   requires the exact 14-file Apps Script inventory, and writes only those files locally.
-* Candidate tests run without either the source token or Google credential in their step.
-  Their detailed output is suppressed because this controller repository is public.
-* DEV and production use separate GitHub environments and separate Google OAuth grants.
-  IDs and credentials are environment secrets. Public code contains only their SHA-256
-  allowlist values.
+* Candidate tests run in a separate GitHub-hosted job from every credential-bearing
+  execution step. Their detailed output is suppressed because this controller is public.
+* DEV dispatches a strict, exact-SHA payload to a private executor repository whose trusted
+  workflow runs on a dedicated self-hosted Mac runner. Candidate source is handled only as
+  data and is never executed on that Mac.
+* The Mac uses its existing local clasp authentication and a locally stored, hash-allowlisted
+  DEV project configuration. No Google OAuth or clasp credential is stored in GitHub.
 * Every run is serialized. The Apps Script API endpoint/method allowlist contains no
   trigger, Script Properties, Sheets, Drive, Gmail, Blackbaud, permissions, scripts.run,
   deployment-create, or deployment-delete operation.
@@ -42,15 +44,19 @@ to read-only Contents access on that one repository.
 3. Create existing labels `deploy-dev-approved` and `deploy-production-approved`. Do not
    permit Actions to create arbitrary approval labels.
 4. Create `carmel-dev`, choose selected branches and tags, and allow exactly branch `main`
-   with no tags. Add environment secrets:
-   `CARMEL_SOURCE_TOKEN`, `CARMEL_SCRIPT_ID`, and `CARMEL_GOOGLE_OAUTH_JSON`.
+   with no tags. Add environment secrets `CARMEL_SOURCE_TOKEN` and
+   `CARMEL_EXECUTOR_TOKEN`. The former is read-only source access; the latter is limited to
+   dispatching and reading Actions in the private executor repository.
 5. The source token is a fine-grained PAT owned by the school-controlled GitHub account,
    limited to only `Samantha1294/Carmel-connect`, with **Contents: Read-only** and no other
    repository or account permissions. Set an expiry and rotate it.
-6. The DEV OAuth JSON has exactly `client_id`, `client_secret`, and `refresh_token`, from a
-   dedicated school-controlled OAuth client/grant. Required scopes are Apps Script projects
-   plus deployment read-only. It is not a clasp credential file.
-7. Do not create or populate `carmel-production` until the DEV bridge test passes. Production
+6. Register a dedicated self-hosted macOS runner only with the private
+   `Samantha1294/Carmel-connect-runner` repository and add the custom label
+   `carmel-connect-dev`. Run it as a dedicated local service account when practical.
+7. On that Mac, set `CARMEL_SOURCE_REPO_PATH` to the authenticated local working copy of the
+   private authoritative source and `CARMEL_DEV_CLASP_PROJECT` to a durable local
+   `.clasp.json` that targets only DEV. These values and clasp authentication stay local.
+8. Do not create or populate `carmel-production` until the DEV bridge test passes. Production
    later gets separate credentials, protected-branch restriction, and Samantha as required
    reviewer. The staff deployment ID exists only as `CARMEL_STAFF_DEPLOYMENT_ID` there.
 
