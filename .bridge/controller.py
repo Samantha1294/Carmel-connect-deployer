@@ -25,7 +25,7 @@ BRANCH = "main"
 WORKFLOW = ".github/workflows/carmel-release.yml"
 EXECUTOR_WORKFLOW = "execute-dev.yml"
 EXECUTOR_EVENT = "carmel-dev-approved-v1"
-EXECUTOR_SHA = "8ea607c3886a64bf76dcef3515b98415f6e44496"
+EXECUTOR_SHA = "958c4d70f19b080595b409e47b342fb0cf37e3b1"
 LABELS = {"dev": "deploy-dev-approved", "production": "deploy-production-approved"}
 
 # SHA-256 allowlists let the public controller validate identifiers supplied only
@@ -375,14 +375,12 @@ def dispatch_dev(executor, request, env, wait=time.sleep):
     check(current.get("object", {}).get("sha") == EXECUTOR_SHA,
           "Private executor main does not match the controller allowlist")
     run_id = int(env.get("GITHUB_RUN_ID", "0"))
-    run_attempt = int(env.get("GITHUB_RUN_ATTEMPT", "0"))
     issue_number = int(env.get("GITHUB_EVENT_ISSUE_NUMBER", "0"))
-    check(run_id > 0 and run_attempt > 0 and issue_number > 0,
+    check(run_id > 0 and issue_number > 0,
           "Missing trusted controller run metadata")
     title = f"Carmel DEV {request['request_id']} / {run_id}"
     check(not executor_runs(executor, title), "Duplicate DEV executor request identity")
     payload = {
-        "schema": 1,
         "target": "dev",
         "source_sha": request["source_sha"],
         "expected_head_sha": request["expected_head_sha"],
@@ -391,7 +389,6 @@ def dispatch_dev(executor, request, env, wait=time.sleep):
         "controller_repo": CONTROLLER_REPO,
         "controller_sha": controller_sha,
         "controller_run_id": run_id,
-        "controller_run_attempt": run_attempt,
         "approval_issue_number": issue_number,
         "executor_sha": EXECUTOR_SHA,
     }
