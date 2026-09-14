@@ -31,9 +31,11 @@ to read-only Contents access on that one repository.
   deployment-create, or deployment-delete operation.
 * Manifest changes and any request marked high-risk are blocked. Those require a separate
   explicitly approved procedure.
-* Production requires a successful DEV workflow run for the same exact source SHA and a
-  separate owner-applied production label. It updates only the allowlisted existing staff
-  deployment after creating and verifying an immutable version.
+* Standard-risk production releases require a separate owner-applied production label.
+  A successful DEV workflow run for the same exact source SHA may be supplied as additional
+  evidence but is optional. High-risk releases remain blocked from this routine bridge and
+  require a separate explicitly approved procedure. Production updates only the allowlisted
+  existing staff deployment after creating and verifying an immutable version.
 
 ## One-time owner setup
 
@@ -75,9 +77,10 @@ The controller intentionally does not close issues or post comments. The run sum
 transport verification. Authenticated UI/runtime smoke testing remains a separate acceptance
 step and does not require a Terminal.
 
-After that exact DEV run succeeds and is approved, create a separate issue and apply only the
-production label:
+For a standard-risk production release, create a separate issue and apply only the production
+label. Set `dev_run_id` to a successful controller DEV run ID for the same exact SHA when that
+evidence exists; otherwise set it to `null`:
 
 ```json
-{"schema":1,"target":"production","source_sha":"FULL_TESTED_SHA","expected_head_sha":"FULL_CURRENT_PRODUCTION_HEAD_SHA","expected_version":165,"dev_run_id":SUCCESSFUL_DEV_CONTROLLER_RUN_ID,"request_id":"unique-production-id","risk":"standard"}
+{"schema":1,"target":"production","source_sha":"FULL_TESTED_SHA","expected_head_sha":"FULL_CURRENT_PRODUCTION_HEAD_SHA","expected_version":165,"dev_run_id":null,"request_id":"unique-production-id","risk":"standard"}
 ```
