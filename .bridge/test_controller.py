@@ -105,10 +105,29 @@ class Tests(unittest.TestCase):
             with self.subTest(bad=bad), self.assertRaises(c.Stop):
                 c.parse_request(json.dumps(bad))
 
-    def test_production_request_requires_dev_evidence(self):
-        self.assertEqual(c.parse_request(json.dumps(self.prod_request()))["target"], "production")
-        with self.assertRaises(c.Stop):
-            c.parse_request(json.dumps(dict(self.prod_request(), dev_run_id=None)))
+    def test_production_request_accepts_optional_dev_evidence(self):
+        with_evidence = self.prod_request()
+        without_evidence = dict(with_evidence, dev_run_id=None)
+        self.assertEqual(
+            c.parse_request(json.dumps(with_evidence))["dev_run_id"], 123)
+        self.assertIsNone(
+            c.parse_request(json.dumps(without_evidence))["dev_run_id"])
+        for invalid in (0, "123"):
+            with self.subTest(invalid_dev_run_id=invalid), self.assertRaises(c.Stop):
+                c.parse_request(json.dumps(
+                    dict(with_evidence, dev_run_id=invalid)))
+
+    def test_dev_evidence_verification_runs_only_when_supplied(self):
+        controller = object()
+        with patch.object(c, "verify_dev_evidence") as verify:
+            c.verify_optional_dev_evidence(
+                controller, dict(self.prod_request(), dev_run_id=None))
+            verify.assert_not_called()
+            c.verify_optional_dev_evidence(controller, self.prod_request())
+            verify.assert_called_once_with(
+                controller, 123, self.prod_request()["source_sha"])
+            c.verify_optional_dev_evidence(controller, REQUEST)
+            verify.assert_called_once()
 
     def test_secret_identifiers_use_hash_allowlist(self):
         value = "known"
@@ -204,6 +223,17 @@ class Tests(unittest.TestCase):
         self.assertIsNone(body["client_payload"]["dev_run_id"])
         self.assertEqual(body["client_payload"]["executor_sha"], c.EXECUTOR_SHA)
         self.assertEqual(len(body["client_payload"]), 10)
+
+    def test_direct_production_dispatch_preserves_null_dev_evidence(self):
+        executor = FakeExecutor()
+        request = dict(self.prod_request(), dev_run_id=None)
+        env = {"GITHUB_SHA": "c" * 40, "GITHUB_RUN_ID": "123",
+               "GITHUB_EVENT_ISSUE_NUMBER": "7"}
+        c.dispatch_executor(executor, request, env, wait=lambda seconds: None)
+        payload = executor.posts[0][1]["client_payload"]
+        self.assertEqual(payload["target"], "production")
+        self.assertIsNone(payload["dev_run_id"])
+        self.assertEqual(payload["source_sha"], request["source_sha"])
 
     def test_executor_dispatch_rejects_changed_or_duplicate_executor(self):
         env = {"GITHUB_SHA": "c" * 40, "GITHUB_RUN_ID": "123",

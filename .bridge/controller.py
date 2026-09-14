@@ -25,7 +25,7 @@ BRANCH = "main"
 WORKFLOW = ".github/workflows/carmel-release.yml"
 EXECUTOR_WORKFLOW = "execute-dev.yml"
 EXECUTOR_EVENT = "carmel-release-approved-v1"
-EXECUTOR_SHA = "03db83a70871143783744f0a988883f62f904541"
+EXECUTOR_SHA = "551ffc75152856b139e06c7b9fc83772eeebb8eb"
 LABELS = {"dev": "deploy-dev-approved", "production": "deploy-production-approved"}
 
 # SHA-256 allowlists let the public controller validate identifiers supplied only
@@ -176,8 +176,9 @@ def parse_request(body):
     else:
         check(type(request["expected_version"]) is int and request["expected_version"] > 0,
               "Production baseline version required")
-        check(type(request["dev_run_id"]) is int and request["dev_run_id"] > 0,
-              "Successful DEV run ID required")
+        check(request["dev_run_id"] is None or
+              (type(request["dev_run_id"]) is int and request["dev_run_id"] > 0),
+              "DEV evidence must be a positive run ID when supplied")
     return request
 
 
@@ -340,6 +341,11 @@ def verify_dev_evidence(controller, run_id, source_sha):
           "DEV run does not attest this exact source SHA")
 
 
+def verify_optional_dev_evidence(controller, request):
+    if request["target"] == "production" and request["dev_run_id"] is not None:
+        verify_dev_evidence(controller, request["dev_run_id"], request["source_sha"])
+
+
 def executor_runs(executor, display_title):
     result = executor.get(
         f"/actions/workflows/{EXECUTOR_WORKFLOW}/runs?event=repository_dispatch&per_page=50")
@@ -492,8 +498,7 @@ def main():
           "Controller main advanced; stale queued release rejected")
     candidate = read_candidate(request, Path("candidate"))
     if command == ["dispatch"]:
-        if request["target"] == "production":
-            verify_dev_evidence(controller, request["dev_run_id"], request["source_sha"])
+        verify_optional_dev_evidence(controller, request)
         executor = GitHub(os.environ.pop("EXECUTOR_TOKEN", ""), EXECUTOR_REPO)
         report = dispatch_executor(executor, request, os.environ)
         report.update({"target": request["target"], "source_sha": request["source_sha"],
@@ -510,8 +515,7 @@ def main():
           "Command and request target must match")
     source = GitHub(os.environ.pop("SOURCE_TOKEN", ""), SOURCE_REPO)
     baseline, unused = source.source(request["expected_head_sha"])
-    if request["target"] == "production":
-        verify_dev_evidence(controller, request["dev_run_id"], request["source_sha"])
+    verify_optional_dev_evidence(controller, request)
     api = AppsScript(request["target"], os.environ.pop("SCRIPT_ID", ""),
                      os.environ.pop("STAFF_DEPLOYMENT_ID", ""),
                      os.environ.pop("GOOGLE_OAUTH_JSON", ""))
