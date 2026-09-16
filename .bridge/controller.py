@@ -25,7 +25,7 @@ BRANCH = "main"
 WORKFLOW = ".github/workflows/carmel-release.yml"
 EXECUTOR_WORKFLOW = "execute-dev.yml"
 EXECUTOR_EVENT = "carmel-release-approved-v1"
-EXECUTOR_SHA = "551ffc75152856b139e06c7b9fc83772eeebb8eb"
+EXECUTOR_SHA = "4c7637a499c089d2a643956c9c65cccb10992e39"
 LABELS = {"dev": "deploy-dev-approved", "production": "deploy-production-approved"}
 
 # SHA-256 allowlists let the public controller validate identifiers supplied only
@@ -39,7 +39,7 @@ STAFF_HASH = "e1365f9ba8eec709b83c468a64dfbf43966871138fd011bbb59b5d902047b2cf"
 FILES = (
     "appsscript.json", "BlackbaudApi.js", "BlackbaudFamilySync.js",
     "BlackbaudFamilySyncRepair.js", "BlackbaudGradeSync.js",
-    "BlackbaudMedicalDiagnostic.js", "Code.js", "ConductSync.js",
+    "BlackbaudMedicalDiagnostic.js", "BehaviorRisk.js", "Code.js", "ConductSync.js",
     "Index.html", "Scripts.html", "Styles.html", "StudentCollegePlans.js",
     "TeacherGradeAudit.js", "WatchListFilters.js",
 )
