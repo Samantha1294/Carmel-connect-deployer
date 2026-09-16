@@ -91,6 +91,10 @@ class FakeExecutor:
 
 
 class Tests(unittest.TestCase):
+    def test_apps_script_inventory_explicitly_includes_behavior_risk(self):
+        self.assertIn("BehaviorRisk.js", c.FILES)
+        self.assertEqual(c.FILES.count("BehaviorRisk.js"), 1)
+
     def prod_request(self):
         return dict(REQUEST, target="production", expected_version=165, dev_run_id=123)
 
@@ -157,7 +161,7 @@ class Tests(unittest.TestCase):
         api = FakeAPI()
         report = self.run_release(api)
         self.assertEqual([(m, p) for m, p, b in api.writes], [("PUT", "/content")])
-        self.assertEqual(report["files_verified"], 14)
+        self.assertEqual(report["files_verified"], 15)
 
     def test_drift_and_manifest_change_block_all_writes(self):
         for baseline, expected in [(dict(BASELINE, **{"Code.js": "drift"}), SOURCE),
