@@ -25,7 +25,7 @@ BRANCH = "main"
 WORKFLOW = ".github/workflows/carmel-release.yml"
 EXECUTOR_WORKFLOW = "execute-dev.yml"
 EXECUTOR_EVENT = "carmel-release-approved-v1"
-EXECUTOR_SHA = "460d676f5e00a95066e0e96000660c9ac9d2eda1"
+EXECUTOR_SHA = "ac45da9b2f6c21f4e23e49408b101b5dc642e464"
 LABELS = {"dev": "deploy-dev-approved", "production": "deploy-production-approved"}
 
 # SHA-256 allowlists let the public controller validate identifiers supplied only
@@ -37,13 +37,16 @@ TARGET_HASHES = {
 STAFF_HASH = "e1365f9ba8eec709b83c468a64dfbf43966871138fd011bbb59b5d902047b2cf"
 
 FILES = (
-    "appsscript.json", "BlackbaudApi.js", "BlackbaudFamilySync.js",
+    "appsscript.json", "AcademicPolicy.js", "BlackbaudApi.js", "BlackbaudFamilySync.js",
     "BlackbaudFamilySyncRepair.js", "BlackbaudGradeSync.js",
     "BlackbaudMedicalDiagnostic.js", "BehaviorRisk.js", "Code.js", "ConductSync.js",
     "Index.html", "Scripts.html", "Styles.html", "StudentCollegePlans.js",
     "TeacherGradeAudit.js", "WatchListFilters.js",
 )
-TEST_FILES = ("tests/student-college-plans.cjs",)
+TEST_FILES = (
+    "tests/academic-policy.cjs", "tests/academic-profile-integration.cjs",
+    "tests/academic-standing-ui.cjs", "tests/student-college-plans.cjs",
+)
 ROOT = Path(__file__).resolve().parent
 
 
