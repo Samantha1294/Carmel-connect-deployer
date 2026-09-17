@@ -76,7 +76,12 @@ jobs:
         run: python3 -I .bridge/controller.py fetch
       - name: Candidate static tests without deployment credentials
         run: |
-          if node --test candidate/tests/student-college-plans.cjs >/tmp/candidate-test.log 2>&1; then
+          if node --test \
+            candidate/tests/academic-policy.cjs \
+            candidate/tests/academic-profile-integration.cjs \
+            candidate/tests/academic-standing-ui.cjs \
+            candidate/tests/student-college-plans.cjs \
+            >/tmp/candidate-test.log 2>&1; then
             echo "Candidate static tests passed."
           else
             echo "STOP: Candidate static tests failed; output suppressed in this public controller."
@@ -124,7 +129,12 @@ jobs:
         run: python3 -I .bridge/controller.py fetch
       - name: Candidate static tests without deployment credentials
         run: |
-          if node --test candidate/tests/student-college-plans.cjs >/tmp/candidate-test.log 2>&1; then
+          if node --test \
+            candidate/tests/academic-policy.cjs \
+            candidate/tests/academic-profile-integration.cjs \
+            candidate/tests/academic-standing-ui.cjs \
+            candidate/tests/student-college-plans.cjs \
+            >/tmp/candidate-test.log 2>&1; then
             echo "Candidate static tests passed."
           else
             echo "STOP: Candidate static tests failed; output suppressed in this public controller."
