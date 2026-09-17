@@ -91,9 +91,15 @@ class FakeExecutor:
 
 
 class Tests(unittest.TestCase):
-    def test_apps_script_inventory_explicitly_includes_behavior_risk(self):
-        self.assertIn("BehaviorRisk.js", c.FILES)
+    def test_apps_script_inventory_explicitly_includes_new_modules(self):
         self.assertEqual(c.FILES.count("BehaviorRisk.js"), 1)
+        self.assertEqual(c.FILES.count("AcademicPolicy.js"), 1)
+        self.assertEqual(c.TEST_FILES, (
+            "tests/academic-policy.cjs",
+            "tests/academic-profile-integration.cjs",
+            "tests/academic-standing-ui.cjs",
+            "tests/student-college-plans.cjs",
+        ))
 
     def prod_request(self):
         return dict(REQUEST, target="production", expected_version=165, dev_run_id=123)
@@ -161,7 +167,7 @@ class Tests(unittest.TestCase):
         api = FakeAPI()
         report = self.run_release(api)
         self.assertEqual([(m, p) for m, p, b in api.writes], [("PUT", "/content")])
-        self.assertEqual(report["files_verified"], 15)
+        self.assertEqual(report["files_verified"], 16)
 
     def test_drift_and_manifest_change_block_all_writes(self):
         for baseline, expected in [(dict(BASELINE, **{"Code.js": "drift"}), SOURCE),
@@ -266,6 +272,8 @@ class Tests(unittest.TestCase):
         self.assertIn("environment: carmel-dev", workflow)
         self.assertIn("environment: carmel-production", workflow)
         self.assertIn("output suppressed in this public controller", workflow)
+        for test in c.TEST_FILES:
+            self.assertEqual(workflow.count("candidate/" + test), 2)
 
     def test_no_plaintext_target_identifiers(self):
         controller = (c.ROOT / "controller.py").read_text()
