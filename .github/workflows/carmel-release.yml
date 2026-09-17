@@ -80,6 +80,8 @@ jobs:
             candidate/tests/academic-policy.cjs \
             candidate/tests/academic-profile-integration.cjs \
             candidate/tests/academic-standing-ui.cjs \
+            candidate/tests/security-authorization.cjs \
+            candidate/tests/security-hardening.cjs \
             candidate/tests/student-college-plans.cjs \
             >/tmp/candidate-test.log 2>&1; then
             echo "Candidate static tests passed."
@@ -133,6 +135,8 @@ jobs:
             candidate/tests/academic-policy.cjs \
             candidate/tests/academic-profile-integration.cjs \
             candidate/tests/academic-standing-ui.cjs \
+            candidate/tests/security-authorization.cjs \
+            candidate/tests/security-hardening.cjs \
             candidate/tests/student-college-plans.cjs \
             >/tmp/candidate-test.log 2>&1; then
             echo "Candidate static tests passed."
