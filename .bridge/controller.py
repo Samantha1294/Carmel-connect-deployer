@@ -45,7 +45,8 @@ FILES = (
 )
 TEST_FILES = (
     "tests/academic-policy.cjs", "tests/academic-profile-integration.cjs",
-    "tests/academic-standing-ui.cjs", "tests/student-college-plans.cjs",
+    "tests/academic-standing-ui.cjs", "tests/security-authorization.cjs",
+    "tests/security-hardening.cjs", "tests/student-college-plans.cjs",
 )
 ROOT = Path(__file__).resolve().parent
 

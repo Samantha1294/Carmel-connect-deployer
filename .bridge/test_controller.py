@@ -98,6 +98,8 @@ class Tests(unittest.TestCase):
             "tests/academic-policy.cjs",
             "tests/academic-profile-integration.cjs",
             "tests/academic-standing-ui.cjs",
+            "tests/security-authorization.cjs",
+            "tests/security-hardening.cjs",
             "tests/student-college-plans.cjs",
         ))
 
