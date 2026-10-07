@@ -40,13 +40,14 @@ FILES = (
     "appsscript.json", "AcademicPolicy.js", "BlackbaudApi.js", "BlackbaudFamilySync.js",
     "BlackbaudFamilySyncRepair.js", "BlackbaudGradeSync.js",
     "BlackbaudMedicalDiagnostic.js", "BehaviorRisk.js", "Code.js", "ConductSync.js",
-    "Index.html", "Scripts.html", "Styles.html", "StudentCollegePlans.js",
+    "Index.html", "Naviance.js", "Scripts.html", "Styles.html", "StudentCollegePlans.js",
     "TeacherGradeAudit.js", "WatchListFilters.js",
 )
 TEST_FILES = (
     "tests/academic-policy.cjs", "tests/academic-profile-integration.cjs",
     "tests/academic-standing-ui.cjs", "tests/security-authorization.cjs",
     "tests/security-hardening.cjs", "tests/student-college-plans.cjs",
+    "tests/naviance.cjs",
 )
 ROOT = Path(__file__).resolve().parent
 
