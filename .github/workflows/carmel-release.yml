@@ -83,6 +83,7 @@ jobs:
             candidate/tests/security-authorization.cjs \
             candidate/tests/security-hardening.cjs \
             candidate/tests/student-college-plans.cjs \
+            candidate/tests/naviance.cjs \
             >/tmp/candidate-test.log 2>&1; then
             echo "Candidate static tests passed."
           else
@@ -138,6 +139,7 @@ jobs:
             candidate/tests/security-authorization.cjs \
             candidate/tests/security-hardening.cjs \
             candidate/tests/student-college-plans.cjs \
+            candidate/tests/naviance.cjs \
             >/tmp/candidate-test.log 2>&1; then
             echo "Candidate static tests passed."
           else
