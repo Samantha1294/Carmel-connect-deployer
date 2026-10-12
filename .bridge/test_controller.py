@@ -170,7 +170,7 @@ class Tests(unittest.TestCase):
         api = FakeAPI()
         report = self.run_release(api)
         self.assertEqual([(m, p) for m, p, b in api.writes], [("PUT", "/content")])
-        self.assertEqual(report["files_verified"], 17)
+        self.assertEqual(report["files_verified"], len(c.FILES))
 
     def test_drift_and_manifest_change_block_all_writes(self):
         for baseline, expected in [(dict(BASELINE, **{"Code.js": "drift"}), SOURCE),
