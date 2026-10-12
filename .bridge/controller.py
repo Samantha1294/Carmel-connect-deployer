@@ -39,7 +39,7 @@ STAFF_HASH = "e1365f9ba8eec709b83c468a64dfbf43966871138fd011bbb59b5d902047b2cf"
 FILES = (
     "appsscript.json", "AcademicPolicy.js", "BlackbaudApi.js", "BlackbaudFamilySync.js",
     "BlackbaudFamilySyncRepair.js", "BlackbaudGradeSync.js",
-    "BlackbaudMedicalDiagnostic.js", "BehaviorRisk.js", "Code.js", "ConductSync.js",
+    "BlackbaudMedicalDiagnostic.js", "BehaviorRisk.js", "BruceProfileMaintenance.js", "Code.js", "ConductSync.js",
     "Index.html", "Naviance.js", "Scripts.html", "Styles.html", "StudentCollegePlans.js",
     "TeacherGradeAudit.js", "WatchListFilters.js",
 )
